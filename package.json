@@ -1,0 +1,29 @@
+{
+  "name": "sun-house-vasteras",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "calibrate": "esbuild scripts/calibrate.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/calibrate.mjs && node node_modules/.cache/calibrate.mjs",
+    "playthrough": "esbuild scripts/playthrough.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/playthrough.mjs && node node_modules/.cache/playthrough.mjs",
+    "optimum": "esbuild scripts/optimum.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/optimum.mjs && node node_modules/.cache/optimum.mjs open && node node_modules/.cache/optimum.mjs city",
+    "verify": "esbuild scripts/verify.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/verify.mjs && node node_modules/.cache/verify.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
