@@ -2,11 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { FLOOR_AREA } from '../sim/design';
 import type { Result } from '../sim/simulate';
 import type { Score } from '../game/score';
+import type { Metric } from '../game/missions';
 import { num, pct } from '../game/format';
-import { Bolt, Check, Flame, HouseMark, Stars, SunIcon, Thermo } from './icons';
+import { Bolt, Flame, HouseMark, Stars, SunIcon, Thermo } from './icons';
 import { useAnimatedNumber } from './hooks';
 
-type State = 'good' | 'warn' | 'bad';
+type State = 'good' | 'warn' | 'bad' | 'info';
 
 export function heatingState(r: Result): State {
   const q = r.heating / FLOOR_AREA;
@@ -24,11 +25,11 @@ export function peakState(r: Result): State {
   return p <= 20 ? 'good' : p <= 32 ? 'warn' : 'bad';
 }
 
-const STATE_WORD: Record<State, string> = { good: 'good', warn: 'fair', bad: 'poor' };
+const STATE_WORD: Record<State, string> = { good: 'good', warn: 'fair', bad: 'poor', info: '' };
 
-function Metric(props: { icon: ReactNode; label: string; value: string; unit: string; state: State }) {
+function Tile(props: { icon: ReactNode; label: string; value: string; unit: string; state: State }) {
   return (
-    <div className="metric" data-state={props.state} aria-label={`${props.label}: ${props.value} ${props.unit}, ${STATE_WORD[props.state]}`}>
+    <div className="metric" data-state={props.state} aria-label={`${props.label}: ${props.value} ${props.unit} ${STATE_WORD[props.state]}`}>
       <span className="metric-icon">{props.icon}</span>
       <span className="metric-label">{props.label}</span>
       <span className="metric-value num">
@@ -39,12 +40,25 @@ function Metric(props: { icon: ReactNode; label: string; value: string; unit: st
   );
 }
 
-export interface GoalChip {
-  short: string;
-  ok: boolean;
+function MetricTile({ metric, result }: { metric: Metric; result: Result }) {
+  switch (metric) {
+    case 'heating':
+      return <Tile icon={<Flame />} label="Heating" value={num(result.heating)} unit="kWh" state={heatingState(result)} />;
+    case 'comfort':
+      return <Tile icon={<Thermo />} label="Above 26 °C" value={num(result.overheatHours)} unit="h" state={comfortState(result)} />;
+    case 'daylight': {
+      const worst = Math.min(result.daylight.front, result.daylight.back);
+      return <Tile icon={<SunIcon />} label="Daylight" value={worst >= 1 ? 'OK' : pct(worst)} unit="" state={daylightState(result)} />;
+    }
+    case 'peak':
+      return <Tile icon={<Bolt />} label="Peak −20 °C" value={num(result.peakLoad / 1000, 1)} unit="kW" state={peakState(result)} />;
+    case 'useful':
+      return <Tile icon={<SunIcon />} label="Useful sun" value={pct(result.usefulShare)} unit="" state="info" />;
+  }
 }
 
-export function TopBar({ result, score, subtitle, goals }: { result: Result; score: Score; subtitle: string; goals?: GoalChip[] }) {
+export function TopBar(props: { result: Result; score: Score; subtitle: string; metrics: Metric[] }) {
+  const { result, score } = props;
   const shown = useAnimatedNumber(score.total);
   const [delta, setDelta] = useState<{ v: number; key: number } | null>(null);
   const last = useRef(score.total);
@@ -55,8 +69,6 @@ export function TopBar({ result, score, subtitle, goals }: { result: Result; sco
     if (Math.abs(d) >= 1) setDelta({ v: d, key: Date.now() });
   }, [score.total]);
 
-  const worstDay = Math.min(result.daylight.front, result.daylight.back);
-
   return (
     <header className="topbar">
       <div className="topbar-inner wrap gutter">
@@ -64,14 +76,14 @@ export function TopBar({ result, score, subtitle, goals }: { result: Result; sco
           <HouseMark className="brand-mark" />
           <div>
             <div className="brand-name">Sun House Västerås</div>
-            <div className="brand-sub">{subtitle}</div>
+            <div className="brand-sub">{props.subtitle}</div>
           </div>
         </div>
         <div className="score" aria-live="polite">
-          <Stars count={score.stars} />
+          {score.max === 1000 && <Stars count={score.stars} />}
           <div>
             <span className="score-num num">{Math.round(shown)}</span>
-            <span className="score-max"> / 1000</span>
+            <span className="score-max num"> / {score.max}</span>
           </div>
           {delta && (
             <span key={delta.key} className={`score-delta ${delta.v > 0 ? 'up' : 'down'}`}>
@@ -81,30 +93,10 @@ export function TopBar({ result, score, subtitle, goals }: { result: Result; sco
           )}
         </div>
         <div className="metrics">
-          <Metric icon={<Flame />} label="Heating" value={num(result.heating)} unit="kWh" state={heatingState(result)} />
-          <Metric icon={<Thermo />} label="Above 26 °C" value={num(result.overheatHours)} unit="h" state={comfortState(result)} />
-          <Metric
-            icon={<SunIcon />}
-            label="Daylight"
-            value={worstDay >= 1 ? 'OK' : pct(worstDay)}
-            unit=""
-            state={daylightState(result)}
-          />
-          <Metric icon={<Bolt />} label="Peak −20 °C" value={num(result.peakLoad / 1000, 1)} unit="kW" state={peakState(result)} />
+          {props.metrics.map((m) => (
+            <MetricTile key={m} metric={m} result={result} />
+          ))}
         </div>
-        {goals && goals.length > 0 && (
-          <div className="goal-strip" aria-label="Mission goals">
-            {goals.map((g) => (
-              <span key={g.short} className="goal-chip" data-ok={g.ok}>
-                <span className="goal-chip-mark" aria-hidden>
-                  {g.ok && <Check size={10} />}
-                </span>
-                {g.short}
-                <span className="sr-only">{g.ok ? ' done' : ' not yet'}</span>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
     </header>
   );

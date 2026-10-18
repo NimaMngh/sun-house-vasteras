@@ -118,7 +118,6 @@ for (const env of ['old', 'code', 'passive'] as const) {
 console.log('\n--- passive, triple, south: overheating measures ---');
 const p: Partial<Design> = { ...good, envelope: 'passive', glazing: 'triple' };
 show('nothing', v(p));
-show('summer mode', v({ ...p, summerMode: true }));
 show('heavy', v({ ...p, mass: 'heavy' }));
 show('carpet', v({ ...p, mass: 'carpet' }));
 show('inside blinds', v({ ...p, shading: 'inside' }));
@@ -126,16 +125,16 @@ show('outside blinds', v({ ...p, shading: 'outside' }));
 show('overhang 0.5', v({ ...p, shading: 'overhang', overhang: 0.5 }));
 show('overhang 1.0', v({ ...p, shading: 'overhang', overhang: 1.0 }));
 show('overhang 1.5', v({ ...p, shading: 'overhang', overhang: 1.5 }));
-show('outside + summer', v({ ...p, shading: 'outside', summerMode: true }));
-show('outside + summer + heavy', v({ ...p, shading: 'outside', summerMode: true, mass: 'heavy' }));
-show('overhang1 + summer + heavy', v({ ...p, shading: 'overhang', overhang: 1, summerMode: true, mass: 'heavy' }));
-show('quad, outside, summer, heavy', v({ ...p, glazing: 'quad', windows: { front: 15, right: 2, back: 10, left: 2 }, shading: 'outside', summerMode: true, mass: 'heavy' }));
-show('city: same', v({ ...p, shading: 'outside', summerMode: true, mass: 'heavy', site: 'city' }));
+show('outside blinds', v({ ...p, shading: 'outside' }));
+show('outside + heavy', v({ ...p, shading: 'outside', mass: 'heavy' }));
+show('overhang 1 + heavy', v({ ...p, shading: 'overhang', overhang: 1, mass: 'heavy' }));
+show('quad, outside, heavy', v({ ...p, glazing: 'quad', windows: { front: 15, right: 2, back: 10, left: 2 }, shading: 'outside', mass: 'heavy' }));
+show('city: same', v({ ...p, shading: 'outside', mass: 'heavy', site: 'city' }));
 
 console.log('\n--- passive, best measures, window sizes ---');
 for (const front of [6, 10, 14, 20, 26, 30]) {
-  show(`front ${front}`, v({ ...p, windows: { front, right: 2, back: 9, left: 2 }, shading: 'outside', summerMode: true, mass: 'heavy' }));
+  show(`front ${front}`, v({ ...p, windows: { front, right: 2, back: 9, left: 2 }, shading: 'outside', mass: 'heavy' }));
 }
 for (const back of [4, 8, 12, 20]) {
-  show(`back ${back}`, v({ ...p, windows: { front: 14, right: 2, back, left: 2 }, shading: 'outside', summerMode: true, mass: 'heavy' }));
+  show(`back ${back}`, v({ ...p, windows: { front: 14, right: 2, back, left: 2 }, shading: 'outside', mass: 'heavy' }));
 }

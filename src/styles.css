@@ -376,12 +376,15 @@ p {
 
 .metrics {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .metric {
+  flex: 1 1 0;
+  min-width: 96px;
+  max-width: 230px;
   display: grid;
   grid-template-columns: auto 1fr;
   grid-template-rows: auto auto;
@@ -426,47 +429,6 @@ p {
   margin-left: 2px;
 }
 
-.goal-strip {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  font-size: 12px;
-  color: var(--bar-fg-2);
-}
-
-.goal-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 9px 2px 4px;
-  border-radius: 99px;
-  border: 1px solid var(--bar-line);
-  color: var(--bar-fg);
-  transition: background 0.25s, border-color 0.25s;
-}
-
-.goal-chip-mark {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1.5px solid var(--bar-fg-2);
-  display: grid;
-  place-items: center;
-}
-
-.goal-chip[data-ok='true'] {
-  background: #1f7a45;
-  border-color: #1f7a45;
-}
-
-.goal-chip[data-ok='true'] .goal-chip-mark {
-  background: #fff;
-  border-color: #fff;
-  color: #1f7a45;
-}
-
 .metric[data-state='good'] .metric-icon {
   color: #49c27c;
 }
@@ -475,6 +437,9 @@ p {
 }
 .metric[data-state='bad'] .metric-icon {
   color: #ff7a6e;
+}
+.metric[data-state='info'] .metric-icon {
+  color: #f5b82e;
 }
 
 @media (max-width: 520px) {
@@ -513,6 +478,9 @@ p {
   .metric[data-state='bad'] .metric-label::before {
     background: #ff7a6e;
   }
+  .metric[data-state='info'] .metric-label::before {
+    background: #f5b82e;
+  }
   .metric-value {
     font-size: 15px;
   }
@@ -525,47 +493,66 @@ p {
 }
 
 .layout {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    'side'
-    'house'
-    'controls'
-    'charts'
-    'balance';
 }
 
-.area-side {
-  grid-area: side;
-  display: grid;
-  gap: 16px;
-  align-content: start;
-  min-width: 0;
+/* On a phone the page is one column in the order of the work: mission, house,
+   controls, then the extra cards. The two column wrappers dissolve. */
+.col {
+  display: contents;
 }
-.area-house {
-  grid-area: house;
+.ord-mission {
+  order: 1;
 }
-.area-controls {
-  grid-area: controls;
+.ord-house {
+  order: 2;
 }
-.area-charts {
-  grid-area: charts;
+.ord-controls {
+  order: 3;
 }
-.area-balance {
-  grid-area: balance;
+.ord-coach {
+  order: 4;
+}
+.ord-charts {
+  order: 5;
+}
+.ord-sun {
+  order: 6;
+}
+.ord-score {
+  order: 7;
+}
+.ord-calc {
+  margin-top: 16px;
 }
 
 @media (min-width: 940px) {
   .layout {
-    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-    grid-template-areas:
-      'house side'
-      'charts controls'
-      'balance controls'
-      '. controls';
-    grid-template-rows: auto auto auto 1fr;
-    align-items: start;
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+  .col-main {
+    flex: 1.25 1 0;
+  }
+  .col-side {
+    flex: 1 1 0;
+  }
+  .ord-mission,
+  .ord-house,
+  .ord-controls,
+  .ord-coach,
+  .ord-charts,
+  .ord-sun,
+  .ord-score {
+    order: 0;
   }
 }
 
@@ -953,10 +940,6 @@ p {
   border-top: 0;
 }
 
-.ctrl[data-new='true'] {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 70%);
-}
-
 .ctrl-head {
   display: flex;
   align-items: center;
@@ -970,32 +953,57 @@ p {
   font-size: 17px;
 }
 
-.ctrl-new {
+.earlier {
+  border-top: 1px solid var(--line);
+  padding: 10px 16px 6px;
+  background: var(--card-2);
+  border-radius: 0 0 var(--r-md) var(--r-md);
+}
+
+.controls > .earlier:first-child {
+  border-top: 0;
+  background: transparent;
+  padding-top: 14px;
+}
+
+.earlier-head {
   font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: var(--accent);
-  color: var(--on-accent);
-  padding: 2px 7px;
-  border-radius: 4px;
-  margin-left: 6px;
-  vertical-align: 2px;
-}
-
-.locked {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 16px;
-  border-top: 1px solid var(--line);
   color: var(--ink-3);
-  font-size: 14px;
+  margin-bottom: 4px;
 }
 
-.locked svg {
-  flex: none;
+.ctrl-sum {
+  border-top: 1px solid var(--line);
+}
+
+.ctrl-sum:first-of-type {
+  border-top: 0;
+}
+
+.ctrl-sum summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  list-style-position: inside;
+}
+
+.ctrl-sum summary .num {
+  color: var(--ink-2);
+  font-weight: 400;
+  text-align: right;
+}
+
+.ctrl-sum-body {
+  padding: 4px 0 14px;
 }
 
 .opts {
@@ -1453,9 +1461,8 @@ input[type='range']::-moz-range-thumb {
   color: var(--ink-3);
 }
 
-.calc {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+.calc.card {
+  padding: 14px 16px;
 }
 
 .calc summary {
@@ -1687,29 +1694,9 @@ input[type='range']::-moz-range-thumb {
   max-width: 58ch;
 }
 
-.intro-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 10px;
-}
-
-.intro-fact {
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: var(--card);
-  border: 1px solid var(--line);
-}
-
-.intro-fact b {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 22px;
-  line-height: 1.1;
-}
-
-.intro-fact span {
-  font-size: 13px;
-  color: var(--ink-2);
+.intro-note {
+  font-size: 14px;
+  color: var(--ink-3);
 }
 
 .intro-actions {

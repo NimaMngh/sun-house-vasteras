@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { Design, START_DESIGN, facadeAzimuth } from '../sim/design';
+import { northWestArea } from '../game/tips';
 import type { Result } from '../sim/simulate';
 import type { Score } from '../game/score';
 import { MAIN_MISSIONS, MISSIONS, type Guess, type Mission, type Snapshot } from '../game/missions';
@@ -115,23 +116,10 @@ export function Intro(props: { onStart: () => void; onFree: () => void; resume: 
             Sun House <span>Västerås</span>
           </h1>
           <p className="intro-lead">
-            You are the architect of a 150 m² house at 59.6° N. Use the low winter sun, keep the summer sun out, and keep the
-            rooms bright. Each change sends your house through a whole year of Västerås weather, hour by hour.
+            Design a house in Västerås that uses the low winter sun and keeps the summer sun out. About ten minutes, one
+            thing to decide at a time.
           </p>
-        </div>
-        <div className="intro-facts">
-          <div className="intro-fact">
-            <b>6 missions</b>
-            <span>built on the six rules, plus a bonus</span>
-          </div>
-          <div className="intro-fact">
-            <b className="num">8 760 h</b>
-            <span>simulated every time you change something</span>
-          </div>
-          <div className="intro-fact">
-            <b className="num">1 000</b>
-            <span>points for the perfect house</span>
-          </div>
+          <p className="intro-note">Every change runs a whole year of weather, hour by hour.</p>
         </div>
         <div className="intro-actions">
           {props.resume ? (
@@ -164,21 +152,19 @@ interface RuleCheck {
 }
 
 function ruleChecks(d: Design, r: Result): RuleCheck[] {
-  const front = facadeAzimuth(d, 'front');
-  const back = facadeAzimuth(d, 'back');
-  const facingSouth = offSouth(front) <= 30 || offSouth(back) <= 30;
-  const northArea = (['front', 'back', 'right', 'left'] as const)
-    .filter((f) => offSouth(facadeAzimuth(d, f)) >= 135)
-    .reduce((s, f) => s + d.windows[f], 0);
+  // the main windows are on the side with the most glass
+  const main = d.windows.front >= d.windows.back ? facadeAzimuth(d, 'front') : facadeAzimuth(d, 'back');
+  const northWest = northWestArea(d);
   const minDay = Math.min(r.daylight.front, r.daylight.back);
   const maxDay = Math.max(r.daylight.front, r.daylight.back);
+  // the wording of slide 24
   return [
-    { name: 'Face south', ok: facingSouth, why: 'Main windows within 30° of south.' },
-    { name: 'Size for daylight', ok: minDay >= 1 && maxDay <= 1.7, why: 'Enough light on both sides, and not much more.' },
-    { name: 'Good glass', ok: d.glazing === 'triple' || d.glazing === 'quad', why: 'Triple glazing: U ≤ 0.8, g ≈ 0.5.' },
-    { name: 'Mass in the sun', ok: d.mass === 'heavy' || d.mass === 'medium', why: 'Concrete or stone the sun can reach.' },
-    { name: 'Shade outside, and move it', ok: d.shading === 'outside', why: 'External blinds that come down when it is warm.' },
-    { name: 'Few north windows', ok: northArea <= 12, why: `${num(northArea)} m² of window faces north.` },
+    { name: 'Face south', ok: offSouth(main) <= 30, why: 'Main windows on the south side, at most 30° east or west of south.' },
+    { name: 'Size for daylight', ok: minDay >= 1 && maxDay <= 1.7, why: 'Windows as large as daylight needs: more glass costs heating power.' },
+    { name: 'Good glass', ok: d.glazing === 'triple' || d.glazing === 'quad', why: 'Triple glazing: loses little heat (U ≤ 0.8) and lets half of the sun through (g ≈ 0.5).' },
+    { name: 'Mass in the sun', ok: d.mass === 'heavy' || d.mass === 'medium', why: 'Heavy floors and inner walls where the sun hits them store heat for the night.' },
+    { name: 'Shade outside, and move it', ok: d.shading === 'outside', why: 'Blinds on the outside of the window: lowered in summer, raised in winter.' },
+    { name: 'Few north and west windows', ok: northWest <= 12, why: `${num(northWest)} m² of window faces north or west. North loses heat all winter, west overheats in summer afternoons.` },
   ];
 }
 
@@ -230,7 +216,7 @@ export function Final(props: {
         <section className="card card-pad">
           <div className="card-head">
             <h2 className="card-title">The six rules in your house</h2>
-            <span className="eyebrow">slide 23</span>
+            <span className="eyebrow">slide 24</span>
           </div>
           <ul className="rules">
             {checks.map((c) => (

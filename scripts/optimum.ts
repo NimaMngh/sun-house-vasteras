@@ -4,7 +4,7 @@ import { simulate } from '../src/sim/simulate';
 import { score } from '../src/game/score';
 
 const site = (process.argv[2] ?? 'open') as Design['site'];
-let best: Design = { ...START_DESIGN, orientation: 180, windows: { front: 10, back: 8, right: 3, left: 3 }, glazing: 'triple', envelope: 'passive', shading: 'outside', mass: 'heavy', summerMode: true, site };
+let best: Design = { ...START_DESIGN, orientation: 180, windows: { front: 10, back: 8, right: 3, left: 3 }, glazing: 'triple', envelope: 'passive', shading: 'outside', mass: 'heavy', site };
 const s = (d: Design) => score(simulate(d)).total;
 let bestScore = s(best);
 const moves: ((d: Design) => Design)[] = [];

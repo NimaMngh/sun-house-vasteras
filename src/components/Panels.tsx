@@ -20,6 +20,8 @@ export function MissionPanel(props: {
   startedAt: number;
   done: boolean;
   nextLabel: string;
+  /** offer the way to the final screen (the last missions) */
+  canFinish: boolean;
   onGuess: (g: Guess) => void;
   onNext: () => void;
   onSkip: () => void;
@@ -54,7 +56,7 @@ export function MissionPanel(props: {
         ))}
       </div>
       <div className="eyebrow">
-        {mission.bonus ? 'Bonus mission' : `Mission ${props.index + 1} of ${MISSIONS.filter((m) => !m.bonus).length}`} · {mission.tag}
+        {mission.bonus ? 'Bonus' : `Mission ${props.index + 1} of ${MISSIONS.filter((m) => !m.bonus).length}`} · {mission.tag}
       </div>
       <h1 id="mission-title" className="mission-title">
         {mission.title}
@@ -69,24 +71,17 @@ export function MissionPanel(props: {
       {mission.guess && (
         <div className="guess">
           <div className="guess-q">{mission.guess.question}</div>
-          <div className="guess-options">
-            {mission.guess.options.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                className={`btn ${props.guess === o.id ? 'btn-primary' : ''}`}
-                aria-pressed={props.guess === o.id}
-                disabled={props.guess !== null}
-                onClick={() => props.onGuess(o.id)}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-          {props.guess !== null && (
+          {props.guess === null ? (
+            <div className="guess-options">
+              {mission.guess.options.map((o) => (
+                <button key={o.id} type="button" className="btn" onClick={() => props.onGuess(o.id)}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          ) : (
             <p className="guess-result">
-              Noted. Now switch the house to <b>Passive house</b> under Insulation, and watch the useful share in the sun card.
-              Right now <b>{pct(result.usefulShare)}</b> of the sun through the windows saves heating.
+              You guessed <b>{mission.guess.options.find((o) => o.id === props.guess)?.label.toLowerCase()}</b>. {mission.guess.after}
             </p>
           )}
         </div>
@@ -129,10 +124,14 @@ export function MissionPanel(props: {
             Skip <Arrow size={14} />
           </button>
         )}
-        <span style={{ flex: 1 }} />
-        <button type="button" className="btn btn-ghost" onClick={props.onFinish}>
-          See my house
-        </button>
+        {props.canFinish && (
+          <>
+            <span style={{ flex: 1 }} />
+            <button type="button" className="btn btn-ghost" onClick={props.onFinish}>
+              See my house
+            </button>
+          </>
+        )}
       </div>
     </section>
   );
@@ -143,9 +142,7 @@ export function FreePanel(props: { score: Score; best: number; onFinish: () => v
     <section className="card card-pad">
       <div className="eyebrow">Free design</div>
       <h1 className="mission-title">Your best house</h1>
-      <p className="mission-brief">
-        Every control is open. Change anything and the house runs through the whole year again: 8 760 hours of Västerås weather.
-      </p>
+      <p className="mission-brief">Everything is open. Each change runs a whole year of Västerås weather.</p>
       <div className="modal-score" style={{ marginTop: 12 }}>
         Best so far <b className="num">{num(Math.max(props.best, props.score.total))}</b> points
         <Stars count={props.score.stars} className="final-stars" />
@@ -200,93 +197,98 @@ function Rating(props: { name: string; detail: string; points: number; max: numb
   );
 }
 
-export function Balance({ result, score, design }: { result: Result; score: Score; design: Design }) {
+/** The four ratings with their points. */
+export function ScoreCard({ result, score }: { result: Result; score: Score }) {
+  return (
+    <section className="card card-pad" aria-label="Score">
+      <div className="card-head">
+        <h2 className="card-title">The score</h2>
+        <span className="eyebrow num">
+          {num(score.total)} / {num(score.max)}
+        </span>
+      </div>
+      <div className="breakdown">
+        <Rating
+          name="Heating"
+          detail={`${num(result.heating / 150, 1)} kWh/m² a year`}
+          points={score.heating}
+          max={MAX_POINTS.heating}
+          color="var(--heat)"
+        />
+        <Rating
+          name="Summer comfort"
+          detail={`${num(result.overheatHours)} h above 26 °C`}
+          points={score.comfort}
+          max={MAX_POINTS.comfort}
+          color="var(--accent)"
+        />
+        <Rating
+          name="Daylight"
+          detail={`${pct(Math.min(result.daylight.front, result.daylight.back))} on the darker side`}
+          points={score.daylight}
+          max={MAX_POINTS.daylight}
+          color="var(--sun)"
+        />
+        <Rating
+          name="Peak power"
+          detail={`${num(result.peakLoad / 150)} W/m² at −20 °C`}
+          points={score.peak}
+          max={MAX_POINTS.peak}
+          color="var(--cool)"
+        />
+      </div>
+    </section>
+  );
+}
+
+/** How much of the sun through the windows saves heating (slide 12, η_u). */
+export function SunCard({ result }: { result: Result }) {
   const useful = result.usefulShare * result.solar;
   const wasted = Math.max(0, result.solar - useful);
   const usefulPct = result.solar > 0 ? (useful / result.solar) * 100 : 0;
   return (
-    <section className="card card-pad balance" aria-label="Score and sun balance">
-      <div>
-        <div className="card-head">
-          <h2 className="card-title">The score</h2>
-          <span className="eyebrow num">{num(score.total)} / 1000</span>
-        </div>
-        <div className="breakdown">
-          <Rating
-            name="Heating"
-            detail={`${num(result.heating / 150, 1)} kWh/m² a year`}
-            points={score.heating}
-            max={MAX_POINTS.heating}
-            color="var(--heat)"
-          />
-          <Rating
-            name="Summer comfort"
-            detail={`${num(result.overheatHours)} h above 26 °C`}
-            points={score.comfort}
-            max={MAX_POINTS.comfort}
-            color="var(--accent)"
-          />
-          <Rating
-            name="Daylight"
-            detail={`${pct(Math.min(result.daylight.front, result.daylight.back))} on the darker side`}
-            points={score.daylight}
-            max={MAX_POINTS.daylight}
-            color="var(--sun)"
-          />
-          <Rating
-            name="Peak power"
-            detail={`${num(result.peakLoad / 150)} W/m² at −20 °C`}
-            points={score.peak}
-            max={MAX_POINTS.peak}
-            color="var(--cool)"
-          />
-        </div>
+    <section className="card card-pad sun-flow" aria-label="Sun through the windows">
+      <div className="card-head" style={{ marginBottom: 2 }}>
+        <h2 className="card-title">The sun through your windows</h2>
       </div>
-
-      <div className="sun-flow">
-        <div className="card-head" style={{ marginBottom: 2 }}>
-          <h2 className="card-title">The sun through your windows</h2>
-        </div>
-        <div className="sun-bar" role="img" aria-label={`${pct(result.usefulShare)} of the sun through the windows saves heating`}>
-          <span style={{ width: `${usefulPct}%`, background: 'var(--sun)' }} />
-          <span style={{ width: `${100 - usefulPct}%`, background: 'var(--line-strong)' }} />
-        </div>
-        <div className="legend" style={{ padding: 0 }}>
-          <span className="legend-item">
-            <span className="legend-swatch" style={{ background: 'var(--sun)' }} /> saves heating
-          </span>
-          <span className="legend-item">
-            <span className="legend-swatch" style={{ background: 'var(--line-strong)' }} /> comes when no heat is needed
-          </span>
-        </div>
-        <div className="sun-facts">
-          <div>
-            <div className="fact-label">Sun in</div>
-            <div className="fact-value num">
-              {num(result.solar)} <small>kWh</small>
-            </div>
+      <div className="sun-bar" role="img" aria-label={`${pct(result.usefulShare)} of the sun through the windows saves heating`}>
+        <span style={{ width: `${usefulPct}%`, background: 'var(--sun)' }} />
+        <span style={{ width: `${100 - usefulPct}%`, background: 'var(--line-strong)' }} />
+      </div>
+      <div className="legend" style={{ padding: 0 }}>
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ background: 'var(--sun)' }} /> saves heating
+        </span>
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ background: 'var(--line-strong)' }} /> comes when no heat is needed
+        </span>
+      </div>
+      <div className="sun-facts">
+        <div>
+          <div className="fact-label">Sun in</div>
+          <div className="fact-value num">
+            {num(result.solar)} <small>kWh</small>
           </div>
-          <div>
-            <div className="fact-label">Useful as heat</div>
-            <div className="fact-value num">
-              {pct(result.usefulShare)} <small>{num(useful)} kWh</small>
-            </div>
+        </div>
+        <div>
+          <div className="fact-label">Useful as heat</div>
+          <div className="fact-value num">
+            {pct(result.usefulShare)} <small>{num(useful)} kWh</small>
           </div>
-          <div>
-            <div className="fact-label">Not needed</div>
-            <div className="fact-value num">
-              {num(wasted)} <small>kWh</small>
-            </div>
+        </div>
+        <div>
+          <div className="fact-label">Not needed</div>
+          <div className="fact-value num">
+            {num(wasted)} <small>kWh</small>
           </div>
         </div>
       </div>
-      <Workings result={result} design={design} />
     </section>
   );
 }
 
 /** The calculation behind the numbers, with this house's own values. */
-function Workings({ result, design }: { result: Result; design: Design }) {
+export function Workings({ result, design }: { result: Result; design: Design }) {
   const glass = GLAZING[design.glazing];
   const area = Object.values(design.windows).reduce((a, b) => a + b, 0);
   const h = result.loss.windows + result.loss.opaque + result.loss.ventilation;
@@ -295,11 +297,11 @@ function Workings({ result, design }: { result: Result; design: Design }) {
   const saved = result.heatingNoSun - result.heating;
   const role = { front: 'front', back: 'back', right: 'gable', left: 'gable' } as const;
   return (
-    <details className="calc">
+    <details className="calc card">
       <summary>How these numbers are calculated</summary>
       <div className="calc-body">
         <section>
-          <h3>Peak heat on the coldest day (slide 22)</h3>
+          <h3>Peak heat on the coldest day (slide 23)</h3>
           <table className="calc-table">
             <tbody>
               <tr>
@@ -374,7 +376,7 @@ function Workings({ result, design }: { result: Result; design: Design }) {
         </section>
 
         <section>
-          <h3>Useful share of the sun (slide 12, η)</h3>
+          <h3>Useful share of the sun (slide 12, η<sub>u</sub>)</h3>
           <p>The same year is run a second time with no sun through the windows.</p>
           <p className="calc-eq num">
             ({num(result.heatingNoSun)} − {num(result.heating)}) kWh ÷ {num(result.solar)} kWh = <b>{pct(result.usefulShare)}</b>
@@ -386,7 +388,7 @@ function Workings({ result, design }: { result: Result; design: Design }) {
         </section>
 
         <section>
-          <h3>Sun through each facade</h3>
+          <h3>Sun through each facade (slide 12, Q<sub>sol</sub>)</h3>
           <table className="calc-table">
             <tbody>
               {FACADES.filter((f) => design.windows[f] > 0).map((f) => (

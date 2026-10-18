@@ -68,7 +68,7 @@ function svgX(e: RPE<SVGSVGElement>, vbW: number) {
 
 // ---------- the year ----------
 
-function YearChart({ result }: { result: Result }) {
+function YearChart({ result, showComfort }: { result: Result; showComfort: boolean }) {
   const { wrap, tip, setTip, place } = useTip();
   const W = useWidth(wrap);
   const H = W > 520 ? 220 : 178;
@@ -108,10 +108,12 @@ function YearChart({ result }: { result: Result }) {
             <span className="tt-key" style={{ background: 'var(--sun)' }} />
             Heat from the sun {num(fromSun[i])} kWh
           </div>
-          <div className="tt-row">
-            <span className="tt-key" style={{ background: 'var(--accent)' }} />
-            Above 26 °C {num(hot[i])} h
-          </div>
+          {showComfort && (
+            <div className="tt-row">
+              <span className="tt-key" style={{ background: 'var(--accent)' }} />
+              Above 26 °C {num(hot[i])} h
+            </div>
+          )}
         </>
       ),
     });
@@ -170,8 +172,8 @@ function YearChart({ result }: { result: Result }) {
         })}
       </svg>
 
-      <div className="chart-sub">Hours above 26 °C, per month</div>
-      <svg
+      {showComfort && <div className="chart-sub">Hours above 26 °C, per month</div>}
+      {showComfort && <svg
         className="chart-svg"
         viewBox={`0 0 ${W} ${H2}`}
         role="img"
@@ -204,7 +206,7 @@ function YearChart({ result }: { result: Result }) {
             </g>
           );
         })}
-      </svg>
+      </svg>}
       {tip && (
         <div className="tooltip" style={{ left: tip.x, top: tip.y }}>
           {tip.content}
@@ -400,28 +402,41 @@ function WeekChart({ trace, kind }: { trace: WeekTrace; kind: 'hot' | 'cold' }) 
   );
 }
 
-export function Charts({ result }: { result: Result }) {
-  const [tab, setTab] = useState<Tab>('year');
+export type ChartDetail = 'year' | 'season' | 'all';
+
+const TABS: Record<ChartDetail, [Tab, string][]> = {
+  year: [],
+  season: [
+    ['year', 'Year'],
+    ['hot', 'July heat'],
+  ],
+  all: [
+    ['year', 'Year'],
+    ['hot', 'July heat'],
+    ['cold', 'January cold'],
+  ],
+};
+
+export function Charts({ result, level }: { result: Result; level: ChartDetail }) {
+  const [chosen, setTab] = useState<Tab>('year');
+  const tabs = TABS[level];
+  const tab = tabs.some(([id]) => id === chosen) ? chosen : 'year';
   return (
     <section className="card" aria-label="Charts">
       <div className="chart-tabs card-head" style={{ marginBottom: 0 }}>
-        <h2 className="card-title">Your year, hour by hour</h2>
-        <div className="seg" role="group" aria-label="Chart">
-          {(
-            [
-              ['year', 'Year'],
-              ['hot', 'July heat'],
-              ['cold', 'January cold'],
-            ] as [Tab, string][]
-          ).map(([id, label]) => (
-            <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <h2 className="card-title">{level === 'year' ? 'Heat through the year' : 'Your year, hour by hour'}</h2>
+        {tabs.length > 0 && (
+          <div className="seg" role="group" aria-label="Chart">
+            {tabs.map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="chart-body">
-        {tab === 'year' && <YearChart result={result} />}
+        {tab === 'year' && <YearChart result={result} showComfort={level !== 'year'} />}
         {tab === 'hot' && <WeekChart trace={result.hotWeek} kind="hot" />}
         {tab === 'cold' && <WeekChart trace={result.coldWeek} kind="cold" />}
       </div>

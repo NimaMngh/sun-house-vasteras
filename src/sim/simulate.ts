@@ -81,13 +81,13 @@ export interface Result {
   solar: number;
   solarMonthly: number[];
   solarByFacade: Record<Facade, number>;
-  /** share of the sun through the windows that saved heating (slide 12) */
+  /** share of the sun through the windows that saved heating: the gain utilisation factor η_u (slide 12) */
   usefulShare: number;
   /** hours with the room above 26 °C */
   overheatHours: number;
   overheatMonthly: number[];
   maxIndoor: number;
-  /** heat load on the coldest day, W at −20 °C without sun (slide 22) */
+  /** heat load on the coldest day, W at −20 °C without sun (slide 23) */
   peakLoad: number;
   /** glass on each side of the house relative to what daylight needs (1 = enough) */
   daylight: { front: number; back: number };
@@ -274,16 +274,16 @@ function run(design: Design, sun: Record<Facade, FacadeSun> | null, w: Weather, 
     const te = w.temp[t];
     const hr = w.hour[t];
 
-    // ventilation, with the summer measures of slide 20
+    // Ventilation. In summer the heat recovery is bypassed when the room is warm and
+    // it is cooler outside, and on warm nights the windows are opened. This is how
+    // a well managed house is run, so every design gets it.
     let hVe = hVentRecovered;
     const cooler = te < prevAir - 1;
     warm = prevOp > 23.5 || (warm && prevOp > 22.5);
-    if (design.summerMode) {
-      if (prevAir > 23 && te > 12 && cooler) hVe = hVentBypass;
-      const night = hr >= 22 || hr < 7;
-      airing = night && te > 8 && cooler && (prevAir > 23 || (airing && prevAir > 21.5));
-      if (airing) hVe += hNightAiring;
-    }
+    if (prevAir > 23 && te > 12 && cooler) hVe = hVentBypass;
+    const night = hr >= 22 || hr < 7;
+    airing = night && te > 8 && cooler && (prevAir > 23 || (airing && prevAir > 21.5));
+    if (airing) hVe += hNightAiring;
     // without a plan, people still open a window when the room is hot
     if (prevOp > 26 && te > 8 && cooler) hVe += hOccupantAiring;
 

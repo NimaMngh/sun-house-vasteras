@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   Design,
   ENVELOPE,
@@ -13,22 +13,37 @@ import {
   type Site,
 } from '../sim/design';
 import type { Result } from '../sim/simulate';
-import { MISSIONS, unlockMission, type Control } from '../game/missions';
+import { ALL_CONTROLS, type Control } from '../game/missions';
 import { compass, compassName, num, pct } from '../game/format';
-import { Lock } from './icons';
 
 interface Props {
   design: Design;
   result: Result;
+  /** controls the student can use */
   open: Set<Control>;
-  fresh: Set<Control>;
-  /** current mission, to word the lock of a control that waits for the guess */
-  missionIndex: number;
+  /** controls of the current mission: shown in full */
+  current: Set<Control>;
+  /** show every open control in full (the last missions and free design) */
+  expandAll: boolean;
   onChange: (d: Design) => void;
 }
 
 const FACADE_ORDER: Facade[] = ['front', 'back', 'right', 'left'];
 const FACADE_ROLE: Record<Facade, string> = { front: 'Front', back: 'Back', right: 'Gable', left: 'Gable' };
+
+const GLAZING_NAME: Record<Glazing, string> = {
+  double: 'Double',
+  triple: 'Triple',
+  solar: 'Triple, solar control',
+  quad: 'Quadruple',
+};
+const ENVELOPE_NAME: Record<Envelope, string> = { old: '1970s house', code: 'New build', passive: 'Passive house' };
+const MASS_NAME: Record<Mass, string> = {
+  light: 'Light timber',
+  carpet: 'Concrete under carpet',
+  medium: 'Medium',
+  heavy: 'Heavy, exposed',
+};
 
 function Options<T extends string>(props: {
   name: string;
@@ -89,34 +104,6 @@ function Slider(props: {
   );
 }
 
-function Group(props: { title: string; tag: string; fresh: boolean; children: ReactNode }) {
-  return (
-    <section className="ctrl" data-new={props.fresh}>
-      <div className="ctrl-head">
-        <h3 className="ctrl-title">
-          {props.title}
-          {props.fresh && <span className="ctrl-new">New</span>}
-        </h3>
-        <span className="tag">{props.tag}</span>
-      </div>
-      {props.children}
-    </section>
-  );
-}
-
-function Locked({ control, title, current }: { control: Control; title: string; current: number }) {
-  const m = unlockMission(control);
-  const when = m === current ? 'opens after your guess' : MISSIONS[m]?.bonus ? 'opens in the bonus mission' : `opens in mission ${m + 1}`;
-  return (
-    <div className="locked">
-      <Lock />
-      <span>
-        {title} · {when}
-      </span>
-    </div>
-  );
-}
-
 function DayBar({ label, value }: { label: string; value: number }) {
   const max = 2;
   const ok = value >= 1;
@@ -136,39 +123,50 @@ function DayBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function Controls({ design, result, open, fresh, missionIndex, onChange }: Props) {
+function specGlass(g: Glazing) {
+  const s = GLAZING[g];
+  return `U ${num(s.u, 1)} · g ${num(s.g, 2)} · light ${Math.round(s.lt * 100)} %`;
+}
+
+function specEnvelope(e: Envelope) {
+  const s = ENVELOPE[e];
+  return `wall U ${num(s.uWall, 2)} · ${s.recovery > 0 ? `heat recovery ${Math.round(s.recovery * 100)} %` : 'no heat recovery'}`;
+}
+
+export function Controls({ design, result, open, current, expandAll, onChange }: Props) {
   const set = <K extends keyof Design>(key: K, value: Design[K]) => onChange({ ...design, [key]: value });
   const setWindow = (f: Facade, v: number) => onChange({ ...design, windows: { ...design.windows, [f]: v } });
+  const windowTotal = Object.values(design.windows).reduce((a, b) => a + b, 0);
 
-  const groups: { control: Control; title: string; node: () => ReactNode }[] = [
-    {
-      control: 'orientation',
+  const defs: Record<Control, { title: string; tag: string; summary: string; body: ReactNode }> = {
+    orientation: {
       title: 'Orientation',
-      node: () => (
-        <Group title="Orientation" tag="Rule 1 · Face south" fresh={fresh.has('orientation')}>
-          <Slider
-            id="orientation"
-            label={
-              <>
-                Front faces
-                <small>drag the compass too</small>
-              </>
-            }
-            value={design.orientation}
-            min={0}
-            max={345}
-            step={15}
-            display={`${compass(design.orientation)} ${design.orientation}°`}
-            onChange={(v) => set('orientation', v)}
-          />
-        </Group>
+      tag: 'Rule 1',
+      summary: `${compass(design.orientation)} ${design.orientation}°`,
+      body: (
+        <Slider
+          id="orientation"
+          label={
+            <>
+              Front faces
+              <small>or drag the compass</small>
+            </>
+          }
+          value={design.orientation}
+          min={0}
+          max={345}
+          step={15}
+          display={`${compass(design.orientation)} ${design.orientation}°`}
+          onChange={(v) => set('orientation', v)}
+        />
       ),
     },
-    {
-      control: 'windows',
-      title: 'Windows',
-      node: () => (
-        <Group title="Window area" tag="Rules 2 and 6 · Daylight, few north windows" fresh={fresh.has('windows')}>
+    windows: {
+      title: 'Window area',
+      tag: 'Rules 2 and 6',
+      summary: `${num(windowTotal)} m²`,
+      body: (
+        <>
           {FACADE_ORDER.map((f) => {
             const az = facadeAzimuth(design, f);
             return (
@@ -194,52 +192,42 @@ export function Controls({ design, result, open, fresh, missionIndex, onChange }
             <DayBar label={`${compass(facadeAzimuth(design, 'front'))} rooms`} value={result.daylight.front} />
             <DayBar label={`${compass(facadeAzimuth(design, 'back'))} rooms`} value={result.daylight.back} />
           </div>
-        </Group>
+        </>
       ),
     },
-    {
-      control: 'glazing',
+    glazing: {
       title: 'Glass',
-      node: () => (
-        <Group title="Glass" tag="Rule 3 · Good glass" fresh={fresh.has('glazing')}>
-          <Options<Glazing>
-            name="glazing"
-            value={design.glazing}
-            onChange={(v) => set('glazing', v)}
-            options={[
-              { id: 'double', name: 'Double', spec: specGlass('double') },
-              { id: 'triple', name: 'Triple', spec: specGlass('triple') },
-              { id: 'solar', name: 'Triple, solar control', spec: specGlass('solar') },
-              { id: 'quad', name: 'Quadruple', spec: specGlass('quad') },
-            ]}
-          />
-        </Group>
+      tag: 'Rule 3',
+      summary: GLAZING_NAME[design.glazing],
+      body: (
+        <Options<Glazing>
+          name="glazing"
+          value={design.glazing}
+          onChange={(v) => set('glazing', v)}
+          options={(['double', 'triple', 'solar', 'quad'] as Glazing[]).map((id) => ({ id, name: GLAZING_NAME[id], spec: specGlass(id) }))}
+        />
       ),
     },
-    {
-      control: 'envelope',
+    envelope: {
       title: 'Insulation',
-      node: () => (
-        <Group title="Insulation and ventilation" tag="Slide 18 · How good is the house" fresh={fresh.has('envelope')}>
-          <Options<Envelope>
-            name="envelope"
-            value={design.envelope}
-            onChange={(v) => set('envelope', v)}
-            columns="three"
-            options={[
-              { id: 'old', name: '1970s house', spec: specEnvelope('old') },
-              { id: 'code', name: 'New build', spec: specEnvelope('code') },
-              { id: 'passive', name: 'Passive house', spec: specEnvelope('passive') },
-            ]}
-          />
-        </Group>
+      tag: 'Slide 19',
+      summary: ENVELOPE_NAME[design.envelope],
+      body: (
+        <Options<Envelope>
+          name="envelope"
+          value={design.envelope}
+          onChange={(v) => set('envelope', v)}
+          columns="three"
+          options={(['old', 'code', 'passive'] as Envelope[]).map((id) => ({ id, name: ENVELOPE_NAME[id], spec: specEnvelope(id) }))}
+        />
       ),
     },
-    {
-      control: 'shading',
+    shading: {
       title: 'Shading',
-      node: () => (
-        <Group title="Shading" tag="Rule 5 · Shade outside, and move it" fresh={fresh.has('shading')}>
+      tag: 'Rule 5',
+      summary: { none: 'None', overhang: `Overhang ${num(design.overhang, 1)} m`, inside: 'Blinds inside', outside: 'Blinds outside' }[design.shading],
+      body: (
+        <>
           <Options<Shading>
             name="shading"
             value={design.shading}
@@ -265,85 +253,74 @@ export function Controls({ design, result, open, fresh, missionIndex, onChange }
               />
             </div>
           )}
-        </Group>
+        </>
       ),
     },
-    {
-      control: 'mass',
+    mass: {
       title: 'Thermal mass',
-      node: () => (
-        <Group title="Thermal mass" tag="Rule 4 · Mass in the sun" fresh={fresh.has('mass')}>
-          <Options<Mass>
-            name="mass"
-            value={design.mass}
-            onChange={(v) => set('mass', v)}
-            options={[
-              { id: 'light', name: 'Light timber', spec: 'wood floors, plasterboard' },
-              { id: 'carpet', name: 'Concrete under carpet', spec: 'heavy, but covered' },
-              { id: 'medium', name: 'Medium', spec: 'concrete slab, wood floor' },
-              { id: 'heavy', name: 'Heavy, exposed', spec: 'bare concrete floors and walls' },
-            ]}
-          />
-        </Group>
+      tag: 'Rule 4',
+      summary: MASS_NAME[design.mass],
+      body: (
+        <Options<Mass>
+          name="mass"
+          value={design.mass}
+          onChange={(v) => set('mass', v)}
+          options={[
+            { id: 'light', name: MASS_NAME.light, spec: 'wood floors, plasterboard' },
+            { id: 'carpet', name: MASS_NAME.carpet, spec: 'heavy, but covered' },
+            { id: 'medium', name: MASS_NAME.medium, spec: 'concrete slab, wood floor' },
+            { id: 'heavy', name: MASS_NAME.heavy, spec: 'bare concrete floors and walls' },
+          ]}
+        />
       ),
     },
-    {
-      control: 'summer',
-      title: 'Summer ventilation',
-      node: () => (
-        <Group title="Summer ventilation" tag="Slide 20 · Bypass and night air" fresh={fresh.has('summer')}>
-          <label className="switch" htmlFor="summer">
-            <span className="switch-text">
-              Bypass the heat recovery and air the house on warm nights
-              <small>Off: the heat recovery warms the fresh air all year</small>
-            </span>
-            <input
-              id="summer"
-              type="checkbox"
-              role="switch"
-              checked={design.summerMode}
-              onChange={(e) => set('summerMode', e.target.checked)}
-            />
-            <span className="switch-track" aria-hidden />
-          </label>
-        </Group>
-      ),
-    },
-    {
-      control: 'site',
+    site: {
       title: 'Plot',
-      node: () => (
-        <Group title="Plot" tag="Task 1 · The neighbour" fresh={fresh.has('site')}>
-          <Options<Site>
-            name="site"
-            value={design.site}
-            onChange={(v) => set('site', v)}
-            options={[
-              { id: 'open', name: 'Open field', spec: 'nothing in front of the sun' },
-              { id: 'city', name: 'City plot', spec: '12 m building, 25 m to the south' },
-            ]}
-          />
-        </Group>
+      tag: 'Task 1',
+      summary: design.site === 'city' ? 'City plot' : 'Open field',
+      body: (
+        <Options<Site>
+          name="site"
+          value={design.site}
+          onChange={(v) => set('site', v)}
+          options={[
+            { id: 'open', name: 'Open field', spec: 'nothing in front of the sun' },
+            { id: 'city', name: 'City plot', spec: '12 m building, 25 m to the south' },
+          ]}
+        />
       ),
     },
-  ];
+  };
+
+  const shown = ALL_CONTROLS.filter((c) => open.has(c));
+  const full = shown.filter((c) => expandAll || current.has(c));
+  const earlier = shown.filter((c) => !full.includes(c));
 
   return (
     <div className="card controls" aria-label="Design controls">
-      {groups.map((g) =>
-        open.has(g.control) ? <Fragment key={g.control}>{g.node()}</Fragment> : <Locked key={g.control} control={g.control} title={g.title} current={missionIndex} />,
+      {full.map((c) => (
+        <section className="ctrl" key={c}>
+          <div className="ctrl-head">
+            <h3 className="ctrl-title">{defs[c].title}</h3>
+            <span className="tag">{defs[c].tag}</span>
+          </div>
+          {defs[c].body}
+        </section>
+      ))}
+      {earlier.length > 0 && (
+        <div className="earlier">
+          <div className="earlier-head">Your earlier choices</div>
+          {earlier.map((c) => (
+            <details className="ctrl-sum" key={c}>
+              <summary>
+                <span>{defs[c].title}</span>
+                <span className="num">{defs[c].summary}</span>
+              </summary>
+              <div className="ctrl-sum-body">{defs[c].body}</div>
+            </details>
+          ))}
+        </div>
       )}
     </div>
   );
 }
-
-function specGlass(g: Glazing) {
-  const s = GLAZING[g];
-  return `U ${num(s.u, 1)} · g ${num(s.g, 2)} · light ${Math.round(s.lt * 100)} %`;
-}
-
-function specEnvelope(e: Envelope) {
-  const s = ENVELOPE[e];
-  return `wall U ${num(s.uWall, 2)} · ${s.recovery > 0 ? `heat recovery ${Math.round(s.recovery * 100)} %` : 'no heat recovery'}`;
-}
-

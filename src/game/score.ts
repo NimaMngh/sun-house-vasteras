@@ -1,4 +1,6 @@
 // The design score: heating 300, summer comfort 250, daylight 250, peak power 200.
+// A mission counts only the ratings the student has met so far, so the score
+// always measures what is on the screen.
 
 import { FLOOR_AREA } from '../sim/design';
 import type { Result } from '../sim/simulate';
@@ -30,9 +32,12 @@ const PEAK: Curve = [
   [10, 200], [15, 190], [20, 173], [30, 134], [45, 78], [65, 21], [80, 0],
 ];
 
-export const MAX_POINTS = { heating: 300, comfort: 250, daylight: 250, peak: 200 };
+export type Part = 'heating' | 'comfort' | 'daylight' | 'peak';
+export const ALL_PARTS: Part[] = ['heating', 'comfort', 'daylight', 'peak'];
+
+export const MAX_POINTS: Record<Part, number> = { heating: 300, comfort: 250, daylight: 250, peak: 200 };
 export const MAX_SCORE = 1000;
-/** points for one, two and three stars */
+/** points for one, two and three stars, with all four ratings counting */
 export const STARS = [650, 850, 950];
 
 export interface Score {
@@ -40,18 +45,24 @@ export interface Score {
   comfort: number;
   daylight: number;
   peak: number;
+  /** points in the ratings that count */
   total: number;
+  /** most points the counting ratings can give */
+  max: number;
+  /** only with all four ratings counting */
   stars: number;
 }
 
-export function score(r: Result): Score {
+export function score(r: Result, parts: Part[] = ALL_PARTS): Score {
   const heating = interp(r.heating / FLOOR_AREA, HEATING);
   const comfort = interp(r.overheatHours, OVERHEAT);
   const peak = interp(r.peakLoad / FLOOR_AREA, PEAK);
   const f = Math.min(1, r.daylight.front);
   const b = Math.min(1, r.daylight.back);
   const daylight = 125 * (f * f + b * b);
-  const total = Math.round(heating + comfort + peak + daylight);
-  const stars = STARS.filter((s) => total >= s).length;
-  return { heating, comfort, daylight, peak, total, stars };
+  const points = { heating, comfort, daylight, peak };
+  const total = Math.round(parts.reduce((sum, p) => sum + points[p], 0));
+  const max = parts.reduce((sum, p) => sum + MAX_POINTS[p], 0);
+  const stars = parts.length === ALL_PARTS.length ? STARS.filter((s) => total >= s).length : 0;
+  return { ...points, total, max, stars };
 }

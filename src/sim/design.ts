@@ -20,8 +20,6 @@ export interface Design {
   /** depth of the fixed overhang, m */
   overhang: number;
   envelope: Envelope;
-  /** bypass the heat recovery and open the windows on warm nights */
-  summerMode: boolean;
   site: Site;
 }
 
@@ -118,6 +116,5 @@ export const START_DESIGN: Design = {
   shading: 'none',
   overhang: 0.8,
   envelope: 'code',
-  summerMode: false,
   site: 'open',
 };

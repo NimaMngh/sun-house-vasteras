@@ -2,15 +2,24 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'rea
 import { START_DESIGN, type Design } from './sim/design';
 import { simulate } from './sim/simulate';
 import { noonAltitude } from './sim/weather';
-import { score as scoreOf } from './game/score';
-import { MAIN_MISSIONS, MISSIONS, snapshot, unlockedControls, type Guess, type Snapshot } from './game/missions';
+import { ALL_PARTS, score as scoreOf } from './game/score';
+import {
+  FULL_STAGE,
+  MAIN_MISSIONS,
+  MISSIONS,
+  snapshot,
+  stageOf,
+  unlockedControls,
+  type Guess,
+  type Snapshot,
+} from './game/missions';
 import { coachTip } from './game/tips';
 import { compass, num } from './game/format';
 import { TopBar } from './components/TopBar';
 import { HouseSection, DAYS, type DayId } from './components/HouseSection';
 import { Controls } from './components/Controls';
 import { Charts } from './components/Charts';
-import { Balance, Coach, FreePanel, MissionPanel, type StepState } from './components/Panels';
+import { Coach, FreePanel, MissionPanel, ScoreCard, SunCard, Workings, type StepState } from './components/Panels';
 import { CompleteModal, Final, Intro } from './components/Screens';
 import { clearState, loadState, saveState } from './components/hooks';
 
@@ -78,23 +87,24 @@ export default function App() {
   const [done, setDone] = useState<Done | null>(null);
   const [day, setDay] = useState<DayId>(MISSION_DAY[MISSIONS[state.mission]?.id] ?? 'oct');
 
+  const mission = MISSIONS[state.mission];
+  // What is on the screen: the mission's stage, everything in free design and at the end.
+  const stage = state.phase === 'final' ? FULL_STAGE : stageOf(state.mission, state.freePlay);
+  const showAll = stage === FULL_STAGE;
+
   const design = useDeferredValue(state.design);
   const result = useMemo(() => simulate(design), [design]);
-  const sc = useMemo(() => scoreOf(result), [result]);
+  const sc = useMemo(() => scoreOf(result, stage.parts), [result, stage]);
   const settled = design === state.design;
 
-  const mission = MISSIONS[state.mission];
   const open = useMemo(() => {
     const set = unlockedControls(state.mission, state.freePlay);
     const m = MISSIONS[state.mission];
     if (!state.freePlay && m.guess && state.guess === null) m.unlocks.forEach((c) => set.delete(c));
     return set;
   }, [state.mission, state.freePlay, state.guess]);
+  const current = useMemo(() => new Set(state.freePlay ? [] : mission.unlocks), [state.freePlay, mission]);
   const missionDone = state.steps[mission.id] === 'done';
-  const fresh = useMemo(
-    () => (state.freePlay || missionDone ? new Set<never>() : new Set(mission.unlocks)),
-    [state.freePlay, missionDone, mission],
-  );
 
   useEffect(() => saveState(KEY, state), [state]);
   useEffect(() => {
@@ -111,9 +121,10 @@ export default function App() {
     }
   }, [state.phase, state.freePlay, state.startSnap, settled, result, sc, update]);
 
+  // the best score counts only with all four ratings, so that it can be compared
   useEffect(() => {
-    if (state.phase === 'play' && sc.total > state.best && settled) update({ best: sc.total });
-  }, [sc.total, state.best, state.phase, settled, update]);
+    if (state.phase === 'play' && sc.max === 1000 && sc.total > state.best && settled) update({ best: sc.total });
+  }, [sc.total, sc.max, state.best, state.phase, settled, update]);
 
   // a mission is complete when every goal holds for a moment
   useEffect(() => {
@@ -129,23 +140,21 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [state.phase, state.freePlay, state.mission, state.guess, state.startSnap, state.startedAt, done, missionDone, settled, mission, result, design, sc]);
 
-  const goTo = useCallback(
-    (index: number) => {
-      const m = MISSIONS[index];
-      setState((s) => ({
-        ...s,
-        phase: 'play',
-        freePlay: false,
-        mission: index,
-        design: m.setup ? m.setup(s.design) : s.design,
-        startSnap: null,
-        startedAt: Date.now(),
-      }));
-      setDay(MISSION_DAY[m.id] ?? 'oct');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    [],
-  );
+  const goTo = useCallback((index: number) => {
+    const m = MISSIONS[index];
+    setState((s) => ({
+      ...s,
+      phase: 'play',
+      freePlay: false,
+      mission: index,
+      guess: m.guess ? null : s.guess,
+      design: m.setup ? m.setup(s.design) : s.design,
+      startSnap: null,
+      startedAt: Date.now(),
+    }));
+    setDay(MISSION_DAY[m.id] ?? 'oct');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const next = useCallback(() => {
     setDone(null);
@@ -186,11 +195,11 @@ export default function App() {
   if (state.phase === 'final') {
     return (
       <>
-        <TopBar result={result} score={sc} subtitle="Your house" />
+        <TopBar result={result} score={sc} subtitle="Your house" metrics={stage.metrics} />
         <Final
           design={state.design}
           result={result}
-          score={sc}
+          score={scoreOf(result, ALL_PARTS)}
           best={state.best}
           completed={Object.keys(state.steps).filter((k) => state.steps[k] === 'done')}
           bonusDone={state.steps.neighbour === 'done'}
@@ -204,6 +213,7 @@ export default function App() {
 
   const dayInfo = DAYS.find((d) => d.id === day)!;
   const alpha = noonAltitude(dayInfo.n);
+  const canRotate = open.has('orientation');
 
   return (
     <>
@@ -211,99 +221,105 @@ export default function App() {
         result={result}
         score={sc}
         subtitle={state.freePlay ? 'Free design' : `${mission.bonus ? 'Bonus' : `Mission ${state.mission + 1}`} · ${mission.title}`}
-        goals={
-          state.freePlay || missionDone || (mission.guess && state.guess === null)
-            ? undefined
-            : mission.goals.map((g) => ({ short: g.short, ok: g.ok(result, design, sc) }))
-        }
+        metrics={stage.metrics}
       />
       <main className="main gutter">
         <div className="wrap layout">
-          <div className="area-side">
-            {state.freePlay ? (
-              <FreePanel
-                score={sc}
-                best={state.best}
-                onFinish={() => update({ phase: 'final' })}
-                onMissions={() => update({ freePlay: false })}
+          <div className="col col-main">
+            <section className="ord-house card" aria-label="The house" style={{ overflow: 'hidden' }}>
+              <div className="house-head">
+                <div>
+                  <div className="eyebrow">Section at noon</div>
+                  <h2 className="card-title num">
+                    {dayInfo.label}
+                    {day === 'oct' ? ' (today)' : ''}: sun {num(alpha)}° high
+                  </h2>
+                </div>
+                <div className="seg" role="group" aria-label="Day">
+                  {DAYS.map((d) => (
+                    <button key={d.id} type="button" aria-pressed={day === d.id} onClick={() => setDay(d.id)}>
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <HouseSection
+                design={state.design}
+                day={day}
+                canRotate={canRotate}
+                onRotate={(deg) => setDesign({ ...state.design, orientation: deg })}
               />
-            ) : (
-              <MissionPanel
-                index={state.mission}
-                mission={mission}
-                design={design}
-                result={result}
-                score={sc}
-                steps={steps}
-                guess={state.guess}
-                startedAt={state.startedAt}
-                done={missionDone}
-                nextLabel={nextLabel}
-                onGuess={(g) => update({ guess: g })}
-                onNext={next}
-                onSkip={skip}
-                onFinish={() => update({ phase: 'final' })}
-              />
+              <div className="house-foot">
+                <span>
+                  Front faces <b>{compass(state.design.orientation)}</b>
+                </span>
+                {canRotate && <span>Drag the compass to turn the house.</span>}
+              </div>
+            </section>
+
+            {stage.charts !== 'none' && (
+              <div className="ord-charts">
+                <Charts result={result} level={stage.charts} />
+              </div>
             )}
-            <Coach tip={coachTip(design, result, open)} />
-          </div>
-
-          <section className="area-house card" aria-label="The house" style={{ overflow: 'hidden' }}>
-            <div className="house-head">
-              <div>
-                <div className="eyebrow">Section at noon</div>
-                <h2 className="card-title num">
-                  {dayInfo.label}
-                  {day === 'oct' ? ' (today)' : ''}: sun {num(alpha)}° high
-                </h2>
+            {stage.sun && (
+              <div className="ord-sun">
+                <SunCard result={result} />
               </div>
-              <div className="seg" role="group" aria-label="Day">
-                {DAYS.map((d) => (
-                  <button key={d.id} type="button" aria-pressed={day === d.id} onClick={() => setDay(d.id)}>
-                    {d.label}
-                  </button>
-                ))}
+            )}
+            {stage.breakdown && (
+              <div className="ord-score">
+                <ScoreCard result={result} score={sc} />
               </div>
+            )}
+          </div>
+
+          <div className="col col-side">
+            <div className="ord-mission">
+              {state.freePlay ? (
+                <FreePanel
+                  score={sc}
+                  best={state.best}
+                  onFinish={() => update({ phase: 'final' })}
+                  onMissions={() => update({ freePlay: false })}
+                />
+              ) : (
+                <MissionPanel
+                  index={state.mission}
+                  mission={mission}
+                  design={design}
+                  result={result}
+                  score={sc}
+                  steps={steps}
+                  guess={state.guess}
+                  startedAt={state.startedAt}
+                  done={missionDone}
+                  nextLabel={nextLabel}
+                  canFinish={showAll}
+                  onGuess={(g) => update({ guess: g })}
+                  onNext={next}
+                  onSkip={skip}
+                  onFinish={() => update({ phase: 'final' })}
+                />
+              )}
             </div>
-            <HouseSection
-              design={state.design}
-              day={day}
-              canRotate={open.has('orientation')}
-              onRotate={(deg) => setDesign({ ...state.design, orientation: deg })}
-            />
-            <div className="house-foot">
-              <span>
-                Front faces <b>{compass(state.design.orientation)}</b>
-              </span>
-              <span>
-                Windows <b className="num">{num(Object.values(state.design.windows).reduce((a, b) => a + b, 0))} m²</b>
-              </span>
-              <span>
-                Sun through them <b className="num">{num(result.solar)} kWh</b> a year
-              </span>
-              {open.has('orientation') && <span>Drag the compass to turn the house.</span>}
+            {stage.coach && (
+              <div className="ord-coach">
+                <Coach tip={coachTip(design, result)} />
+              </div>
+            )}
+            <div className="ord-controls">
+              <Controls design={state.design} result={result} open={open} current={current} expandAll={showAll} onChange={setDesign} />
             </div>
-          </section>
-
-          <div className="area-controls">
-            <Controls design={state.design} result={result} open={open} fresh={fresh} missionIndex={state.mission} onChange={setDesign} />
           </div>
-
-          <div className="area-charts">
-            <Charts result={result} />
-          </div>
-
-          <div className="area-balance">
-            <Balance result={result} score={sc} design={design} />
-          </div>
+        </div>
+        <div className="wrap ord-calc">
+          <Workings result={result} design={design} />
         </div>
       </main>
       <footer className="footer gutter">
         <div className="wrap footer-inner">
-          <span>
-            Hourly heat balance of one zone (ISO 13790, 5R1C) over a typical Västerås year, calibrated to the monthly sun on
-            the lecture slides. Made for learning, not for design.
-          </span>
+          <span>Hourly heat balance of one zone (ISO 13790) over a typical Västerås year. Made for learning, not for design.</span>
           <button type="button" className="linkish" onClick={start}>
             Start over
           </button>
